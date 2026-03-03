@@ -1,6 +1,0 @@
-videos/
-*.mp4
-models/*.pt
-__pycache__/
-.env
-*.pyc
