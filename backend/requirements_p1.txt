@@ -1,0 +1,10 @@
+ultralytics==8.2.0
+opencv-python==4.9.0.80
+redis==5.0.4
+numpy==1.26.4
+librosa==0.10.2
+sounddevice==0.4.6
+tensorflow==2.16.1
+tensorflow-hub==0.16.1
+python-dotenv==1.0.1
+Flask==3.0.3
