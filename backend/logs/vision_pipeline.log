@@ -1,0 +1,36 @@
+2026-03-04 10:36:42,269 [ROHINI_01] INFO: Starting vision pipeline for ROHINI_01
+2026-03-04 10:36:42,271 [NEHRU_01] INFO: Starting vision pipeline for NEHRU_01
+2026-03-04 10:36:42,272 [AIIMS_01] INFO: Starting vision pipeline for AIIMS_01
+2026-03-04 10:36:42,277 [CP_01] INFO: Starting vision pipeline for CP_01
+2026-03-04 10:36:42,288 [NEHRU_01] INFO: Video opened successfully
+2026-03-04 10:36:42,296 [ROHINI_01] INFO: Video opened successfully
+2026-03-04 10:36:42,297 [AIIMS_01] INFO: Video opened successfully
+2026-03-04 10:36:42,298 [SAK_01] INFO: Starting vision pipeline for SAK_01
+2026-03-04 10:36:42,312 [CP_01] INFO: Video opened successfully
+2026-03-04 10:36:42,355 [SAK_01] INFO: Video opened successfully
+2026-03-04 10:36:42,476 [INA_01] INFO: Starting vision pipeline for INA_01
+2026-03-04 10:36:42,502 [INA_01] INFO: Video opened successfully
+2026-03-04 10:55:03,355 [SAK_01] INFO: Starting vision pipeline for SAK_01
+2026-03-04 10:55:03,374 [SAK_01] INFO: Video opened successfully
+2026-03-04 10:55:03,404 [CP_01] INFO: Starting vision pipeline for CP_01
+2026-03-04 10:55:03,453 [CP_01] INFO: Video opened successfully
+2026-03-04 10:55:03,525 [ROHINI_01] INFO: Starting vision pipeline for ROHINI_01
+2026-03-04 10:55:03,552 [ROHINI_01] INFO: Video opened successfully
+2026-03-04 10:55:03,558 [NEHRU_01] INFO: Starting vision pipeline for NEHRU_01
+2026-03-04 10:55:03,585 [NEHRU_01] INFO: Video opened successfully
+2026-03-04 10:55:03,835 [AIIMS_01] INFO: Starting vision pipeline for AIIMS_01
+2026-03-04 10:55:03,867 [AIIMS_01] INFO: Video opened successfully
+2026-03-04 10:55:04,168 [INA_01] INFO: Starting vision pipeline for INA_01
+2026-03-04 10:55:04,196 [INA_01] INFO: Video opened successfully
+2026-03-06 07:16:30,451 [CP_01] INFO: Starting vision pipeline for CP_01
+2026-03-06 07:16:30,508 [CP_01] INFO: Video opened successfully
+2026-03-06 07:16:30,749 [AIIMS_01] INFO: Starting vision pipeline for AIIMS_01
+2026-03-06 07:16:30,778 [AIIMS_01] INFO: Video opened successfully
+2026-03-06 07:16:30,853 [NEHRU_01] INFO: Starting vision pipeline for NEHRU_01
+2026-03-06 07:16:30,809 [ROHINI_01] INFO: Starting vision pipeline for ROHINI_01
+2026-03-06 07:16:30,854 [INA_01] INFO: Starting vision pipeline for INA_01
+2026-03-06 07:16:30,855 [SAK_01] INFO: Starting vision pipeline for SAK_01
+2026-03-06 07:16:30,871 [NEHRU_01] INFO: Video opened successfully
+2026-03-06 07:16:30,874 [SAK_01] INFO: Video opened successfully
+2026-03-06 07:16:30,877 [ROHINI_01] INFO: Video opened successfully
+2026-03-06 07:16:30,922 [INA_01] INFO: Video opened successfully
