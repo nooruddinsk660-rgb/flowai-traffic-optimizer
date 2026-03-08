@@ -27,19 +27,20 @@ async def log_intersection(iid: str, state: dict, signal: dict):
     """Insert one row per intersection per minute."""
     async with aiosqlite.connect(DB) as db:
         await db.execute(
-            "INSERT INTO vehicle_history (intersection_id, ts, density, vehicle_count, mode, aqi_penalty) VALUES (?,?,?,?,?,?)",
+            """INSERT INTO vehicle_history 
+               (intersection_id, ts, density, vehicle_count, mode, aqi_penalty) 
+               VALUES (?, ?, ?, ?, ?, ?)""",
             (iid,
-             datetime.now().isoformat(),
-             state.get("density", 0),
+             datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
+             state.get("density", 0.0),
              state.get("count", 0),
-             signal.get("mode", "unknown"),
-             signal.get("aqi_penalty", 0))
+             signal.get("mode", "UNKNOWN"),
+             signal.get("aqi_penalty", 0.0))
         )
         await db.commit()
 
 async def get_history(iid: str, hours: int = 6) -> list:
     """Fetch vehicle history for time-series charts."""
-    cutoff = datetime.now().isoformat()[:-7]  # Trim microseconds
     async with aiosqlite.connect(DB) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute("""
@@ -58,14 +59,19 @@ async def run_logging_loop(intersections: list, r):
     """Background task: log all intersections every 60 seconds."""
     while True:
         await asyncio.sleep(60)
+        log.info(f"💾 Logging {len(intersections)} intersections to SQLite history...")
         for node in intersections:
             try:
                 iid      = node["id"]
                 state_r  = await r.get(f"{iid}:state")
                 signal_r = await r.get(f"{iid}:signal")
-                if state_r and signal_r:
-                    await log_intersection(
-                        iid, json.loads(state_r), json.loads(signal_r)
-                    )
+                
+                state_dict = json.loads(state_r) if state_r else {}
+                signal_dict = json.loads(signal_r) if signal_r else {}
+                
+                # Only log if we at least have state data
+                if state_dict:
+                    await log_intersection(iid, state_dict, signal_dict)
+
             except Exception as e:
                 log.warning(f"Log error for {node['id']}: {e}")

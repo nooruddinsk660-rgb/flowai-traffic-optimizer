@@ -48,9 +48,8 @@ async def run_fsm_for_intersection(iid: str, r):
                 log.warning(f"{iid} using FALLBACK density={density}")
 
             # ── AQI penalty ────────────────────────────────────────────
-            aqi_raw = await r.get(f"aqi:{iid}:pm25")
-            pm25    = float(aqi_raw) if aqi_raw else 0.0
-            aqi_pen = round((pm25 / 300) * 15, 1)
+            from aqi_module import get_aqi_penalty
+            aqi_pen = await get_aqi_penalty(iid, r)
 
             # ── Gridlock detection ─────────────────────────────────────
             if density > settings.gridlock_threshold: gridlock_ct += 1
