@@ -3,8 +3,10 @@ import json
 import redis
 import joblib
 import pandas as pd
+import xgboost as xgb
 from datetime import datetime, timedelta
 import os
+import asyncio
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -13,65 +15,99 @@ REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
 
-MODEL_PATH = "models/xgboost_traffic.joblib"
+MODEL_PATH = "models/congestion_model.json"
+ENCODER_PATH = "models/intersection_encoder.pkl"
 
-INTERSECTIONS = ["CP_01", "AIIMS_01", "INA_01", "SAK_01", "NEHRU_01", "KALK_01", "LODHI_01", "ROHINI_01"]
+def get_level(density):
+    if density < 0.4:
+        return "LOW"
+    elif density <= 0.7:
+        return "MEDIUM"
+    else:
+        return "HIGH"
 
-def predict_future_congestion():
-    print("Loading XGBoost model...")
-    if not os.path.exists(MODEL_PATH):
-        print(f"Model not found at {MODEL_PATH}. Train the model first.")
+def forecast_density(intersection_id, now, model, le):
+    intervals = [0, 5, 10, 15, 20, 25, 30]
+    results = []
+    
+    encoded_id = int(le.transform([intersection_id])[0])
+    
+    for t_plus in intervals:
+        future_time = now + timedelta(minutes=t_plus)
+        
+        day_of_week = future_time.weekday()
+        is_weekend = 1 if day_of_week >= 5 else 0
+        hour = future_time.hour
+        minute = future_time.minute
+        
+        minute = 5 * round(minute / 5)
+        if minute == 60:
+            minute = 0
+            hour = (hour + 1) % 24
+            
+        is_peak = 1 if (8 <= hour <= 10) or (17 <= hour <= 20) else 0
+        is_festival = 0 
+        weather_code = 0 
+        
+        features = pd.DataFrame([{
+            "hour": hour,
+            "minute": minute,
+            "day_of_week": day_of_week,
+            "is_weekend": is_weekend,
+            "is_peak": is_peak,
+            "is_festival": is_festival,
+            "weather_code": weather_code,
+            "intersection_id": encoded_id
+        }])
+        
+        density = float(model.predict(features)[0])
+        density = max(0.0, min(1.0, density))
+        
+        # Fix condition for exact 0.7 based on "0.4-0.7"
+        level = "LOW"
+        if density >= 0.7:
+            level = "HIGH"
+        elif density >= 0.4:
+            level = "MEDIUM"
+            
+        results.append({
+            "t_plus": t_plus,
+            "density": round(density, 3),
+            "level": level
+        })
+        
+    return results
+
+async def forecast_loop():
+    print("Loading XGBoost model and Label Encoder...")
+    if not os.path.exists(MODEL_PATH) or not os.path.exists(ENCODER_PATH):
+        print("Models not found. Train the model first.")
         return
         
-    model = joblib.load(MODEL_PATH)
+    model = xgb.XGBRegressor()
+    model.load_model(MODEL_PATH)
+    le = joblib.load(ENCODER_PATH)
     
-    print("Starting Congestion Forecaster Loop (+30 min horizons)...")
+    intersections = list(le.classes_)
+    
+    print("Starting Congestion Forecaster Async Loop (+30 min horizons)...")
     while True:
         try:
             now = datetime.now()
-            future_time = now + timedelta(minutes=30)
             
-            day_of_week = future_time.weekday()
-            is_weekend = 1 if day_of_week >= 5 else 0
-            hour = future_time.hour
-            minute = future_time.minute
+            for intersection in intersections:
+                predictions = forecast_density(intersection, now, model, le)
+                
+                redis_key = f"forecast:{intersection}:30min"
+                redis_client.setex(redis_key, 120, json.dumps(predictions))
+                
+            print(f"[{now.strftime('%H:%M:%S')}] Forecasts updated for 8 intersections.")
             
-            minute = 5 * round(minute / 5)
-            if minute == 60:
-                minute = 0
-                hour = (hour + 1) % 24
-                
-            is_peak = 1 if (8 <= hour <= 10) or (17 <= hour <= 20) else 0
-            is_festival = 0 
-            weather_code = 0 
-            
-            predictions = {}
-            for i_idx, intersection in enumerate(INTERSECTIONS):
-                features = pd.DataFrame([{
-                    "hour": hour,
-                    "minute": minute,
-                    "day_of_week": day_of_week,
-                    "is_weekend": is_weekend,
-                    "is_peak": is_peak,
-                    "is_festival": is_festival,
-                    "weather_code": weather_code,
-                    "intersection_id": i_idx
-                }])
-                
-                density = float(model.predict(features)[0])
-                density = max(0.0, min(1.0, density))
-                predictions[intersection] = round(density, 3)
-                
-                redis_key = f"forecast:{intersection}:30m"
-                redis_client.setex(redis_key, 300, density)
-                
-            print(f"[{now.strftime('%H:%M:%S')}] Forecasted densities for {future_time.strftime('%H:%M')} -> {predictions}")
-            
-            time.sleep(60)
+            await asyncio.sleep(60)
             
         except Exception as e:
             print(f"Error in prediction loop: {e}")
-            time.sleep(10)
+            await asyncio.sleep(10)
 
 if __name__ == "__main__":
-    predict_future_congestion()
+    asyncio.run(forecast_loop())
