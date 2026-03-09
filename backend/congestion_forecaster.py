@@ -7,6 +7,7 @@ import xgboost as xgb
 from datetime import datetime, timedelta
 import os
 import asyncio
+import gc
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -63,6 +64,9 @@ def forecast_density(intersection_id, now, model, le):
         density = float(model.predict(features)[0])
         density = max(0.0, min(1.0, density))
         
+        # Explicit garbage cleanup for dataframe memory
+        del features
+        
         # Fix condition for exact 0.7 based on "0.4-0.7"
         level = "LOW"
         if density >= 0.7:
@@ -79,6 +83,15 @@ def forecast_density(intersection_id, now, model, le):
     return results
 
 async def forecast_loop():
+    print("Initializing Forecast Node...")
+    
+    try:
+        redis_client.ping()
+        print("Redis Connection: OK")
+    except Exception as e:
+        print(f"Redis Connection Failed: {e}")
+        return
+        
     print("Loading XGBoost model and Label Encoder...")
     if not os.path.exists(MODEL_PATH) or not os.path.exists(ENCODER_PATH):
         print("Models not found. Train the model first.")
@@ -89,6 +102,16 @@ async def forecast_loop():
     le = joblib.load(ENCODER_PATH)
     
     intersections = list(le.classes_)
+    
+    print("Running initial boot prediction test...")
+    try:
+        test_preds = forecast_density(intersections[0], datetime.now(), model, le)
+        print(f"Test prediction successful: {intersections[0]} generated {len(test_preds)} horizons.")
+    except Exception as e:
+        print(f"Boot test prediction failed: {e}")
+        return
+        
+    redis_client.setex("forecast:health", 120, "online")
     
     print("Starting Congestion Forecaster Async Loop (+30 min horizons)...")
     while True:
@@ -101,7 +124,11 @@ async def forecast_loop():
                 redis_key = f"forecast:{intersection}:30min"
                 redis_client.setex(redis_key, 120, json.dumps(predictions))
                 
+            redis_client.setex("forecast:health", 120, "online")
+            
             print(f"[{now.strftime('%H:%M:%S')}] Forecasts updated for 8 intersections.")
+            
+            gc.collect()
             
             await asyncio.sleep(60)
             
