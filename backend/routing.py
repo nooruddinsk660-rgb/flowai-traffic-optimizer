@@ -1,6 +1,7 @@
 import networkx as nx
 from geopy.distance import geodesic
 import matplotlib.pyplot as plt
+import math
 
 INTERSECTION_COORDS = {
     "CP_01": (28.6315, 77.2167),
@@ -38,13 +39,52 @@ def build_delhi_graph():
 
 G_DELHI = build_delhi_graph()
 
-def get_compass_entry_direction(source_coords, target_coords):
-    dlat = target_coords[0] - source_coords[0]
-    dlng = target_coords[1] - source_coords[1]
-    if abs(dlat) > abs(dlng):
-        return "north" if dlat < 0 else "south"
+def get_compass_direction(from_coords, to_coords):
+    lat1, lng1 = math.radians(from_coords[0]), math.radians(from_coords[1])
+    lat2, lng2 = math.radians(to_coords[0]), math.radians(to_coords[1])
+    
+    dlng = lng2 - lng1
+    
+    x = math.sin(dlng) * math.cos(lat2)
+    y = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(dlng)
+    
+    bearing = math.atan2(x, y)
+    compass_bearing = (math.degrees(bearing) + 360) % 360
+    
+    if 45 <= compass_bearing < 135:
+        return "east"
+    elif 135 <= compass_bearing < 225:
+        return "south"
+    elif 225 <= compass_bearing < 315:
+        return "west"
     else:
-        return "east" if dlng < 0 else "west"
+        return "north"
+
+def build_ambulance_route(source, destination, G):
+    path = nx.dijkstra_path(G, source, destination, weight="weight")
+    legs = []
+    
+    for i in range(len(path)):
+        current_node = path[i]
+        
+        if i == len(path) - 1:
+            legs.append({
+                "id": current_node,
+                "direction": "arrived",
+                "travel_s": 0
+            })
+        else:
+            next_node = path[i+1]
+            direction = get_compass_direction(INTERSECTION_COORDS[current_node], INTERSECTION_COORDS[next_node])
+            travel_s = G[current_node][next_node]["weight"]
+            
+            legs.append({
+                "id": current_node,
+                "direction": direction,
+                "travel_s": travel_s
+            })
+            
+    return legs
 
 def generate_ambulance_routes(G):
     routes_to_generate = [
@@ -59,29 +99,8 @@ def generate_ambulance_routes(G):
     
     routes_dict = {}
     for start, end in routes_to_generate:
-        path = nx.dijkstra_path(G, start, end, weight="weight")
         key = f"{start}_{end}"
-        
-        legs = []
-        for i in range(len(path)):
-            current_node = path[i]
-            if i == 0:
-                if len(path) > 1:
-                    direction = get_compass_entry_direction(INTERSECTION_COORDS[path[0]], INTERSECTION_COORDS[path[1]])
-                else:
-                    direction = "start"
-                travel_s = G[current_node][path[i+1]]["weight"]
-                legs.append({"id": current_node, "direction": direction, "travel_s": travel_s})
-            elif i == len(path) - 1:
-                legs.append({"id": current_node, "direction": "arrived", "travel_s": 0})
-            else:
-                prev_node = path[i-1]
-                next_node = path[i+1]
-                direction = get_compass_entry_direction(INTERSECTION_COORDS[prev_node], INTERSECTION_COORDS[current_node])
-                travel_s = G[current_node][next_node]["weight"]
-                legs.append({"id": current_node, "direction": direction, "travel_s": travel_s})
-        
-        routes_dict[key] = legs
+        routes_dict[key] = build_ambulance_route(start, end, G)
         
     return routes_dict
 
@@ -113,7 +132,8 @@ if __name__ == "__main__":
     print(f"Graph nodes: {G_DELHI.number_of_nodes()}")
     print(f"Graph edges: {G_DELHI.number_of_edges()}")
     
-    cp_aiims_path = nx.dijkstra_path(G_DELHI, "CP_01", "AIIMS_01", weight="weight")
-    print(f"Shortest path CP_01 -> AIIMS_01: {cp_aiims_path}")
+    cp_aiims_route = AMBULANCE_ROUTES["CP_01_AIIMS_01"]
+    print(f"CP_01 -> AIIMS_01 Route: {cp_aiims_route}")
+    print(f"Total Routes Generated: {len(AMBULANCE_ROUTES)}")
     
     visualize_graph(G_DELHI)
