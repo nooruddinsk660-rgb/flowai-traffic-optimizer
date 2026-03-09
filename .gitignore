@@ -22,3 +22,50 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Multimedia
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.jpg
+*.jpeg
+*.png
+
+# Machine Learning models & data (assuming models/ and data/ are very large or generated)
+*.pt
+*.pth
+*.onnx
+models/ambulance_v1_training/
+models/ambulance_dataset/
+models/yolov8n.pt
+yolov8n.pt
+
+# Installers and Archives
+*.zip
+*.tar.gz
+*.rar
+*.msi
+*.exe
+
+# Redis
+Redis-x64-3.0.504.msi
+redis.zip
+redis/
+
+# Temporary files created by operations
+tracked_folders.txt
+.git_ls_files.txt
