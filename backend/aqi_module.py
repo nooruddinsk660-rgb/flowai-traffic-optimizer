@@ -3,6 +3,8 @@ from config import settings
 
 log = logging.getLogger("aqi")
 
+from signal_brain import safe_redis_get, safe_redis_set
+
 # ── WHO PM2.5 breakpoints → signal penalty seconds ────────────────────────
 # Source: WHO Air Quality Guidelines (2021)
 AQI_PENALTY_MAP = [
@@ -37,7 +39,7 @@ async def get_aqi_penalty(intersection_id: str, r) -> float:
     """Look up cached PM2.5 for nearest station, return penalty seconds."""
     station = INTERSECTION_TO_STATION.get(intersection_id)
     if not station: return 0.0
-    pm25_raw = await r.get(f"aqi:{station}:pm25")
+    pm25_raw = await safe_redis_get(r, f"aqi:{station}:pm25")
     return pm25_to_penalty(float(pm25_raw)) if pm25_raw else 0.0
 
 # ── Station Coordinates for Open-Meteo Air Quality API ─────────────────────
@@ -75,7 +77,7 @@ async def fetch_and_cache_aqi(r):
                         
                         if val > 0:
                             # Cache in redis with TTL 2x the polling rate just in case
-                            await r.set(f"aqi:{station}:pm25", val, ex=settings.aqi_poll_s * 2)
+                            await safe_redis_set(r, f"aqi:{station}:pm25", val, ex=settings.aqi_poll_s * 2)
 
                 log.info(f"AQI live data updated via Open-Meteo: {len(STATION_COORDS)} stations")
 

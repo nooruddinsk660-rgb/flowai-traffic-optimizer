@@ -1,0 +1,18 @@
+{
+    "r2": 0.9646021823177318,
+    "mae": 0.036327300272732406,
+    "mse": 0.001895369691605453,
+    "features": [
+        "hour",
+        "minute",
+        "day_of_week",
+        "is_weekend",
+        "is_peak",
+        "is_festival",
+        "weather_code",
+        "intersection_id"
+    ],
+    "intersection_encoding": "integer_0_to_7",
+    "trained_at": "2026-03-10",
+    "n_rows": 34560
+}

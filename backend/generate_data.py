@@ -41,35 +41,35 @@ def generate_synthetic_data(days=90):
             else:
                 peak_wave = 0.0
                 
-            minute = 0
-            weather_code = np.random.choice([0, 1, 2], p=[0.85, 0.10, 0.05])
+            for minute in [0, 30]:
+                weather_code = np.random.choice([0, 1, 2], p=[0.85, 0.10, 0.05])
             
-            for i_idx, intersection in enumerate(intersections):
-                base = base_densities[intersection]
-                weekend_factor = -0.30 if is_weekend else 0.0
-                noise = random.uniform(-0.08, 0.08)
-                festival_spike = 0.15 if is_festival else 0.0
-                
-                density = base + peak_wave + weekend_factor + noise + festival_spike
-                
-                if weather_code == 1:
-                    density += 0.10 
-                elif weather_code == 2:
-                    density += 0.15 
+                for i_idx, intersection in enumerate(intersections):
+                    base = base_densities[intersection]
+                    weekend_factor = -0.30 if is_weekend else 0.0
+                    noise = random.uniform(-0.08, 0.08)
+                    festival_spike = 0.15 if is_festival else 0.0
                     
-                density = max(0.08, min(0.98, density))
-                
-                rows.append({
-                    "hour": hour,
-                    "minute": minute,
-                    "day_of_week": day_of_week,
-                    "is_weekend": is_weekend,
-                    "is_peak": is_peak,
-                    "is_festival": is_festival,
-                    "weather_code": weather_code,
-                    "intersection_id": i_idx,
-                    "density": density
-                })
+                    density = base + peak_wave + weekend_factor + noise + festival_spike
+                    
+                    if weather_code == 1:
+                        density += 0.10 
+                    elif weather_code == 2:
+                        density += 0.15 
+                        
+                    density = max(0.08, min(0.98, density))
+                    
+                    rows.append({
+                        "hour": hour,
+                        "minute": minute,
+                        "day_of_week": day_of_week,
+                        "is_weekend": is_weekend,
+                        "is_peak": is_peak,
+                        "is_festival": is_festival,
+                        "weather_code": weather_code,
+                        "intersection_id": i_idx,
+                        "density": density
+                    })
                     
     df = pd.DataFrame(rows)
     os.makedirs("data", exist_ok=True)

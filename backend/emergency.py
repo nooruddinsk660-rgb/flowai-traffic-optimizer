@@ -15,6 +15,9 @@ except ImportError:
 
 log = logging.getLogger("emergency")
 
+from signal_brain import safe_redis_get, safe_redis_set
+import constants
+
 async def set_emergency_after(iid: str, direction: str, delay_s: int, ttl: int, r):
     """Sets a single intersection to EMERGENCY mode after a delay."""
     await asyncio.sleep(delay_s)
@@ -26,7 +29,7 @@ async def set_emergency_after(iid: str, direction: str, delay_s: int, ttl: int, 
         "aqi_penalty":      0,    # Ignore AQI during emergencies
         "ts":               datetime.now().isoformat()
     }
-    await r.set(f"{iid}:signal", json.dumps(payload), ex=ttl)
+    await safe_redis_set(r, constants.intersection_signal_key(iid), json.dumps(payload), ex=ttl)
     log.warning(f"🟢 EMERGENCY GREEN at {iid} direction={direction}")
 
 async def activate_corridor(route_key: str, source: str, r) -> dict:
@@ -61,20 +64,26 @@ async def activate_corridor(route_key: str, source: str, r) -> dict:
         "source":        source,
         "activated_at":  datetime.now().isoformat()
     }
-    await r.set("emergency:active", json.dumps(active_payload), ex=total_eta + 60)
+    await safe_redis_set(r, constants.EMERGENCY_KEY, json.dumps(active_payload), ex=total_eta + 60)
     log.warning(f"🚨 CORRIDOR ACTIVATED: {route_key} source={source} eta={total_eta}s")
     return active_payload
 
 async def cancel_corridor(r) -> dict:
     """Cancels active emergency, returns all intersections to adaptive mode."""
-    active = await r.get("emergency:active")
+    active = await safe_redis_get(r, constants.EMERGENCY_KEY)
     if not active:
         return {"status": "no active corridor"}
 
     corridor = json.loads(active).get("corridor", [])
     for iid in corridor:
-        await r.delete(f"{iid}:signal")  # Delete forces FSM to recalculate on next cycle
+        try:
+            await r.delete(constants.intersection_signal_key(iid))  # Delete forces FSM to recalculate on next cycle
+        except Exception as e:
+            log.error(f"Redis delete fail [{constants.intersection_signal_key(iid)}]: {e}")
 
-    await r.delete("emergency:active")
+    try:
+        await r.delete(constants.EMERGENCY_KEY)
+    except Exception as e:
+        log.error(f"Redis delete fail [{constants.EMERGENCY_KEY}]: {e}")
     log.info("✅ Emergency corridor cancelled")
     return {"status": "cancelled", "intersections_reset": corridor}

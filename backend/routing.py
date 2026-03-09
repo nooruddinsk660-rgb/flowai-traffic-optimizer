@@ -1,7 +1,11 @@
+import os
 import networkx as nx
 from geopy.distance import geodesic
 import matplotlib.pyplot as plt
 import math
+
+DEMO_MODE    = os.getenv("DEMO_MODE", "true").lower() == "true"
+DEMO_COMPRESS = float(os.getenv("DEMO_COMPRESS", "0.25"))
 
 INTERSECTION_COORDS = {
     "CP_01": (28.6315, 77.2167),
@@ -33,6 +37,8 @@ def build_delhi_graph():
     for u, v in EDGES:
         dist_km = geodesic(INTERSECTION_COORDS[u], INTERSECTION_COORDS[v]).km
         travel_time_s = int(dist_km * (3600 / 30))
+        if DEMO_MODE:
+            travel_time_s = int(travel_time_s * DEMO_COMPRESS)
         G.add_edge(u, v, weight=travel_time_s, distance_km=dist_km)
         
     return G

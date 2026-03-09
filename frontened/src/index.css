@@ -12,7 +12,7 @@
   --color-traffic-emergency: #dc2626;
 
   --animate-pulse-fast: pulse-fast 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-} 
+}
 
 @keyframes pulse-fast {
 
@@ -51,9 +51,9 @@
 .leaflet-popup-content-wrapper {
   background-color: var(--color-panel) !important;
   border: 1px solid #334155 !important;
-  color: #e2e8f0 !important; 
-  border-radius: 0.5rem !important; 
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important; 
+  color: #e2e8f0 !important;
+  border-radius: 0.5rem !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
 }
 
 .leaflet-popup-tip {
@@ -80,35 +80,107 @@
 .custom-scrollbar::-webkit-scrollbar {
   width: 4px;
 }
+
 .custom-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
+
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #1e293b; /* slate-800 */
+  background: #1e293b;
+  /* slate-800 */
   border-radius: 10px;
 }
+
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #38bdf8; /* accent blue */
+  background: #38bdf8;
+  /* accent blue */
 }
 
-@import "tailwindcss";
 
-@layer base {
-  :root {
-    /* Default Dark Mode */
-    --color-panel: #0f172a;
-    --color-background: #020617;
-    --color-accent: #38bdf8;
-    --color-text: #f1f5f9;
-    --color-border: #1e293b;
+/* Emergency Corridor Dash Animation */
+@keyframes dash-offset {
+  from {
+    stroke-dashoffset: 100;
   }
 
-  /* Light Mode */
-  :root.light {
-    --color-panel: #ffffff;
-    --color-background: #f8fafc;
-    --color-accent: #0284c7; 
-    --color-text: #0f172a;
-    --color-border: #e2e8f0;
+  to {
+    stroke-dashoffset: 0;
   }
+}
+
+.animate-dash-offset {
+  animation: dash-offset 3s linear infinite;
+}
+
+/* Roadmap Rapid Pulse for Emergency Markers */
+@keyframes pulse-rapid {
+
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  50% {
+    transform: scale(1.1);
+    opacity: 0.7;
+  }
+}
+
+.animate-pulse-rapid {
+  animation: pulse-rapid 0.5s ease-in-out infinite;
+}
+
+/* Ensure signal icons don't have default white backgrounds */
+.custom-signal-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* src/index.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Dark Mode (Default) */
+  --background: #080610;
+  --panel: rgba(15, 12, 28, 0.4);
+  --border: rgba(255, 255, 255, 0.05);
+  --text-main: #f1f5f9;
+  --text-muted: #64748b;
+  --accent: #38bdf8;
+}
+
+.light {
+  /* Light Mode - Professional "Paper" Aesthetic */
+  --background: #f8fafc;
+  --panel: rgba(255, 255, 255, 0.8);
+  --border: rgba(0, 0, 0, 0.1);
+  --text-main: #0f172a;
+  --text-muted: #64748b;
+  --accent: #0284c7;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--text-main);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Update your specific components to use these variables */
+.bg-panel {
+  background-color: var(--panel);
+}
+
+.border-main {
+  border-color: var(--border);
+}
+
+.text-main {
+  color: var(--text-main);
+}
+
+.text-muted {
+  color: var(--text-muted);
 }

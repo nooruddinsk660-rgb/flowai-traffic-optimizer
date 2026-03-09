@@ -11,9 +11,10 @@ import logging
 
 from config import settings
 from database import init_db, run_logging_loop, get_history as db_get_history
-from signal_brain import start_all_fsm
+from signal_brain import start_all_fsm, safe_redis_get
 from aqi_module import fetch_and_cache_aqi
 from emergency import activate_corridor, cancel_corridor
+import constants
 
 logger = logging.getLogger("SignalBrainAPI")
 logger.setLevel(logging.INFO)
@@ -34,6 +35,11 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(run_logging_loop(INTERSECTIONS, redis_client))
     asyncio.create_task(start_all_fsm(INTERSECTIONS, redis_client))
     asyncio.create_task(fetch_and_cache_aqi(redis_client))
+    
+    from siren_detector import run_audio_detector
+    asyncio.create_task(run_audio_detector())
+    
+    asyncio.create_task(broadcast_loop())
     
     yield
     
@@ -78,9 +84,13 @@ class ForecastItem(BaseModel):
 
 class IntersectionState(BaseModel):
     id: str
-    signal_state: SignalState = SignalState()  # Default object to avoid parsing errors
+    name: str = "Unknown"
+    active_direction: str = "UNKNOWN"
+    green_seconds: int = 0
+    mode: str = "FALLBACK"
     density: float = 0.0
     aqi_penalty: float = 0.0
+    pm25: float = 0.0
     forecast: List[ForecastItem] = []
 
 class EmergencyRequest(BaseModel):
@@ -101,19 +111,51 @@ async def _get_all_intersections_state() -> List[dict]:
     for node in INTERSECTIONS:
         i_id = node["id"]
         
-        state_str = await redis_client.get(f"{i_id}:state")
-        signal_str = await redis_client.get(f"{i_id}:signal")
-        forecast_str = await redis_client.get(f"forecast:{i_id}:30min")
+        state_str = await safe_redis_get(redis_client, constants.intersection_state_key(i_id))
+        signal_str = await safe_redis_get(redis_client, constants.intersection_signal_key(i_id))
+        forecast_str = await safe_redis_get(redis_client, constants.forecast_key(i_id))
 
         state = json.loads(state_str) if state_str else {}
         signal = json.loads(signal_str) if signal_str else {}
         forecast = json.loads(forecast_str) if forecast_str else []
 
+        from aqi_module import INTERSECTION_TO_STATION
+        station = INTERSECTION_TO_STATION.get(i_id)
+        pm25 = 0.0
+        if station:
+            pm25_str = await safe_redis_get(redis_client, f"aqi:{station}:pm25")
+            if pm25_str:
+                pm25 = float(pm25_str)
+
+        # Frontend mock data has names statically. We map ID to name here
+        # so frontend doesn't lose 'name' when it replaces state
+        NAMES = {
+            "CP_01": "Connaught Place (Inner Circle)",
+            "AIIMS_01": "AIIMS Flyover / Ring Road",
+            "INA_01": "INA Market Crossing",
+            "SAK_01": "Saket - Mehrauli Road",
+            "NEHRU_01": "Nehru Place Crossing",
+            "KALK_01": "Kalkaji Mandir",
+            "LODHI_01": "Lodhi Road",
+            "ROHINI_01": "Rohini West Metro Pillar 402"
+        }
+        name = NAMES.get(i_id, i_id)
+
+        # Flatten signal state to fix "field count mismatch"
+        active_direction = signal.get("active_direction", "UNKNOWN") if signal else "UNKNOWN"
+        green_seconds = signal.get("green_seconds", 0) if signal else 0
+        mode = signal.get("mode", "FALLBACK") if signal else "FALLBACK"
+        aqi_penalty = signal.get("aqi_penalty", 0.0) if signal else 0.0
+
         result.append({
             "id": i_id,
-            "signal_state": signal if signal else {"mode": "FALLBACK"},
+            "name": name,
+            "active_direction": active_direction,
+            "green_seconds": green_seconds,
+            "mode": mode,
             "density": state.get("density", 0.0),
-            "aqi_penalty": signal.get("aqi_penalty", 0.0),
+            "aqi_penalty": aqi_penalty,
+            "pm25": pm25,
             "forecast": forecast
         })
     return result
@@ -141,55 +183,119 @@ async def get_intersections():
 @app.get("/intersection/{intersection_id}", response_model=IntersectionState)
 async def get_intersection(intersection_id: str):
     """Single intersection detail with full state."""
-    state_str = await redis_client.get(f"{intersection_id}:state")
-    signal_str = await redis_client.get(f"{intersection_id}:signal")
-    forecast_str = await redis_client.get(f"forecast:{intersection_id}:30min")
+    state_str = await safe_redis_get(redis_client, constants.intersection_state_key(intersection_id))
+    signal_str = await safe_redis_get(redis_client, constants.intersection_signal_key(intersection_id))
+    forecast_str = await safe_redis_get(redis_client, constants.forecast_key(intersection_id))
 
     state = json.loads(state_str) if state_str else {}
     signal = json.loads(signal_str) if signal_str else {"mode": "FALLBACK"}
     forecast = json.loads(forecast_str) if forecast_str else []
 
+    from aqi_module import INTERSECTION_TO_STATION
+    station = INTERSECTION_TO_STATION.get(intersection_id)
+    pm25 = 0.0
+    if station:
+        pm25_str = await safe_redis_get(redis_client, f"aqi:{station}:pm25")
+        if pm25_str:
+            pm25 = float(pm25_str)
+
+    NAMES = {
+        "CP_01": "Connaught Place (Inner Circle)",
+        "AIIMS_01": "AIIMS Flyover / Ring Road",
+        "INA_01": "INA Market Crossing",
+        "SAK_01": "Saket - Mehrauli Road",
+        "NEHRU_01": "Nehru Place Crossing",
+        "KALK_01": "Kalkaji Mandir",
+        "LODHI_01": "Lodhi Road",
+        "ROHINI_01": "Rohini West Metro Pillar 402"
+    }
+    name = NAMES.get(intersection_id, intersection_id)
+
+    active_direction = signal.get("active_direction", "UNKNOWN") if signal else "UNKNOWN"
+    green_seconds = signal.get("green_seconds", 0) if signal else 0
+    mode = signal.get("mode", "FALLBACK") if signal else "FALLBACK"
+    aqi_penalty = signal.get("aqi_penalty", 0.0) if signal else 0.0
+
     return {
         "id": intersection_id,
-        "signal_state": signal,
+        "name": name,
+        "active_direction": active_direction,
+        "green_seconds": green_seconds,
+        "mode": mode,
         "density": state.get("density", 0.0),
-        "aqi_penalty": signal.get("aqi_penalty", 0.0),
+        "aqi_penalty": aqi_penalty,
+        "pm25": pm25,
         "forecast": forecast
     }
+
+active_connections: List[WebSocket] = []
+
+async def broadcast(data: dict):
+    dead = []
+    for ws in active_connections:
+        try:
+            await ws.send_json(data)
+        except Exception:
+            dead.append(ws) # mark for removal
+    for ws in dead:
+        if ws in active_connections:
+            active_connections.remove(ws) # clean up after loop
+
+async def broadcast_loop():
+    while True:
+        try:
+            if not active_connections:
+                await asyncio.sleep(1)
+                continue
+            
+            intersections = await _get_all_intersections_state_cached()
+            emergency_active_str = await safe_redis_get(redis_client, constants.EMERGENCY_KEY)
+            emergency_active = json.loads(emergency_active_str) if emergency_active_str else None
+
+            payload = {
+                "type": constants.WS_INTERSECTION_UPDATE,
+                "intersections": intersections,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            if emergency_active:
+                payload["emergency"] = emergency_active
+
+            await broadcast(payload)
+            await asyncio.sleep(1)
+        except Exception as e:
+            logger.error(f"Broadcast loop error: {e}")
+            await asyncio.sleep(1)
 
 # 3. WS /ws
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint pushing state every 1s."""
     await websocket.accept()
-    logger.info("WebSocket connected")
+    active_connections.append(websocket)
+    logger.info(f"WebSocket connected. Total: {len(active_connections)}")
     try:
         while True:
-            # Gather state (optimized cache approach)
-            intersections = await _get_all_intersections_state_cached()
-            
-            # Check for emergency
-            emergency_active_str = await redis_client.get("emergency:active")
-            emergency_active = json.loads(emergency_active_str) if emergency_active_str else None
-
-            payload = {
-                "intersections": intersections,
-                "timestamp": datetime.utcnow().isoformat()
-            }
-            if emergency_active:
-                payload["emergency"] = emergency_active
-            
-            await websocket.send_json(payload)
-            await asyncio.sleep(1)
+            await websocket.receive_text()
     except WebSocketDisconnect:
         logger.info("Client disconnected from WebSocket")
     except Exception as e:
         logger.error(f"WS error: {e}")
+    finally:
+        if websocket in active_connections:
+            active_connections.remove(websocket)
+
+from fastapi import HTTPException
 
 # 4. POST /emergency
 @app.post("/emergency")
 async def trigger_emergency(req: EmergencyRequest):
     """Triggers emergency green corridor."""
+    existing = await safe_redis_get(redis_client, constants.EMERGENCY_KEY)
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail="Emergency already active. Cancel first."
+        )
     return await activate_corridor(req.route, req.source, redis_client)
 
 # 5. POST /emergency/cancel
@@ -208,7 +314,7 @@ async def get_history(intersection_id: str, hours: int = 6):
 @app.get("/forecast/{intersection_id}")
 async def get_forecast(intersection_id: str):
     """Reads Person 4's forecast from Redis and returns it."""
-    forecast_str = await redis_client.get(f"forecast:{intersection_id}:30min")
+    forecast_str = await safe_redis_get(redis_client, constants.forecast_key(intersection_id))
     return json.loads(forecast_str) if forecast_str else []
 
 # 8. GET /health
@@ -223,7 +329,7 @@ async def health_check():
     
     intersections_count = len(INTERSECTIONS)
     
-    emergency_active = await redis_client.get("emergency:active")
+    emergency_active = await safe_redis_get(redis_client, constants.EMERGENCY_KEY)
     
     return {
         "redis": redis_status,

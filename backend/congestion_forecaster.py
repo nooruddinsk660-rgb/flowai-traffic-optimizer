@@ -1,7 +1,6 @@
 import time
 import json
 import redis
-import joblib
 import pandas as pd
 import xgboost as xgb
 from datetime import datetime, timedelta
@@ -11,6 +10,7 @@ import gc
 from dotenv import load_dotenv
 
 load_dotenv()
+import constants
 
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
@@ -27,60 +27,50 @@ def get_level(density):
     else:
         return "HIGH"
 
-def forecast_density(intersection_id, now, model, le):
-    intervals = [0, 5, 10, 15, 20, 25, 30]
-    results = []
-    
-    encoded_id = int(le.transform([intersection_id])[0])
-    
-    for t_plus in intervals:
-        future_time = now + timedelta(minutes=t_plus)
+FESTIVAL_DATES = {
+    "2026-01-14", "2026-01-26", "2026-02-26",
+    "2026-03-14",   # Holi
+    "2026-03-28",   # Demo day
+}
+
+FORECAST_SLOTS = constants.FORECAST_SLOTS
+
+def forecast_density(intersection_id, now, model):
+    intersections = ["CP_01", "AIIMS_01", "INA_01", "SAK_01", "NEHRU_01", "KALK_01", "LODHI_01", "ROHINI_01"]
+    try:
+        encoded_id = intersections.index(intersection_id)
+    except ValueError:
+        encoded_id = 0
         
-        day_of_week = future_time.weekday()
-        is_weekend = 1 if day_of_week >= 5 else 0
-        hour = future_time.hour
-        minute = future_time.minute
-        
-        minute = 5 * round(minute / 5)
-        if minute == 60:
-            minute = 0
-            hour = (hour + 1) % 24
+    rows = []
+    for t in FORECAST_SLOTS:
+        future_time = now + timedelta(minutes=t)
+        excess = future_time.minute % 5
+        if excess >= 3:
+            rounded_time = future_time + timedelta(minutes=5 - excess)
+        else:
+            rounded_time = future_time - timedelta(minutes=excess)
             
-        is_peak = 1 if (8 <= hour <= 10) or (17 <= hour <= 20) else 0
-        is_festival = 0 
-        weather_code = 0 
-        
-        features = pd.DataFrame([{
-            "hour": hour,
-            "minute": minute,
-            "day_of_week": day_of_week,
-            "is_weekend": is_weekend,
-            "is_peak": is_peak,
-            "is_festival": is_festival,
-            "weather_code": weather_code,
+        rows.append({
+            "hour": rounded_time.hour,
+            "minute": rounded_time.minute,
+            "day_of_week": rounded_time.weekday(),
+            "is_weekend": 1 if rounded_time.weekday() >= 5 else 0,
+            "is_peak": 1 if (8 <= rounded_time.hour <= 10) or (17 <= rounded_time.hour <= 20) else 0,
+            "is_festival": 1 if rounded_time.strftime("%Y-%m-%d") in FESTIVAL_DATES else 0,
+            "weather_code": 0,
             "intersection_id": encoded_id
-        }])
-        
-        density = float(model.predict(features)[0])
-        density = max(0.0, min(1.0, density))
-        
-        # Explicit garbage cleanup for dataframe memory
-        del features
-        
-        # Fix condition for exact 0.7 based on "0.4-0.7"
-        level = "LOW"
-        if density >= 0.7:
-            level = "HIGH"
-        elif density >= 0.4:
-            level = "MEDIUM"
-            
-        results.append({
-            "t_plus": t_plus,
-            "density": round(density, 3),
-            "level": level
         })
         
-    return results
+    X = pd.DataFrame(rows)
+    raw_preds = model.predict(X)
+    
+    return [
+        {"t_plus": t,
+         "density": round(float(max(0.0, min(1.0, raw_preds[i]))), 3),
+         "level": "HIGH" if raw_preds[i] >= constants.DENSITY_HIGH else ("MEDIUM" if raw_preds[i] >= constants.DENSITY_MEDIUM else "LOW")}
+        for i, t in enumerate(FORECAST_SLOTS)
+    ]
 
 async def forecast_loop():
     print("Initializing Forecast Node...")
@@ -92,26 +82,25 @@ async def forecast_loop():
         print(f"Redis Connection Failed: {e}")
         return
         
-    print("Loading XGBoost model and Label Encoder...")
-    if not os.path.exists(MODEL_PATH) or not os.path.exists(ENCODER_PATH):
+    print("Loading XGBoost model...")
+    if not os.path.exists(MODEL_PATH):
         print("Models not found. Train the model first.")
         return
         
     model = xgb.XGBRegressor()
     model.load_model(MODEL_PATH)
-    le = joblib.load(ENCODER_PATH)
     
-    intersections = list(le.classes_)
+    intersections = ["CP_01", "AIIMS_01", "INA_01", "SAK_01", "NEHRU_01", "KALK_01", "LODHI_01", "ROHINI_01"]
     
     print("Running initial boot prediction test...")
     try:
-        test_preds = forecast_density(intersections[0], datetime.now(), model, le)
+        test_preds = forecast_density(intersections[0], datetime.now(), model)
         print(f"Test prediction successful: {intersections[0]} generated {len(test_preds)} horizons.")
     except Exception as e:
         print(f"Boot test prediction failed: {e}")
         return
         
-    redis_client.setex("forecast:health", 120, "online")
+    redis_client.setex(constants.FORECAST_HEALTH, 120, "online")
     
     print("Starting Congestion Forecaster Async Loop (+30 min horizons)...")
     while True:
@@ -119,12 +108,12 @@ async def forecast_loop():
             now = datetime.now()
             
             for intersection in intersections:
-                predictions = forecast_density(intersection, now, model, le)
+                predictions = forecast_density(intersection, now, model)
                 
-                redis_key = f"forecast:{intersection}:30min"
+                redis_key = constants.forecast_key(intersection)
                 redis_client.setex(redis_key, 120, json.dumps(predictions))
                 
-            redis_client.setex("forecast:health", 120, "online")
+            redis_client.setex(constants.FORECAST_HEALTH, 120, "online")
             
             print(f"[{now.strftime('%H:%M:%S')}] Forecasts updated for 8 intersections.")
             
@@ -137,7 +126,7 @@ async def forecast_loop():
             await asyncio.sleep(10)
 
 def get_forecast_alert(intersection_id, r):
-    redis_key = f"forecast:{intersection_id}:30min"
+    redis_key = constants.forecast_key(intersection_id)
     data = r.get(redis_key)
     
     if not data:

@@ -1,40 +1,43 @@
-"""
-mock_vision.py — Simulates Person 1's video pipeline output.
-Run this whenever Person 1's pipeline is unavailable.
-Writes realistic vehicle density + emergency signals to Redis.
-Usage: python mock_vision.py
-"""
-import redis, json, time, random, math
+import asyncio
+import json
+import redis
+import os
+import random
+import math
 from datetime import datetime
 
-r = redis.Redis(host='localhost', decode_responses=True)
+r = redis.Redis(host=os.getenv("REDIS_HOST", "localhost"), decode_responses=True)
 
-INTERSECTIONS = ['CP_01', 'AIIMS_01', 'INA_01', 'SAK_01',
-                 'NEHRU_01', 'KALK_01', 'LODHI_01', 'ROHINI_01']
+INTERSECTIONS = ["CP_01", "AIIMS_01", "INA_01", "SAK_01", "NEHRU_01", "KALK_01", "LODHI_01", "ROHINI_01"]
+BASELINES = {
+    "CP_01": 0.65, "AIIMS_01": 0.45, "INA_01": 0.55, "SAK_01": 0.40,
+    "NEHRU_01": 0.60, "KALK_01": 0.50, "LODHI_01": 0.42, "ROHINI_01": 0.58
+}
 
-# Per-intersection baseline density (captures different area characteristics)
-BASELINES = {'CP_01':0.7, 'AIIMS_01':0.5, 'INA_01':0.55, 'SAK_01':0.45,
-             'NEHRU_01':0.6, 'KALK_01':0.5, 'LODHI_01':0.4, 'ROHINI_01':0.65}
+async def run_mock():
+    print("🎭 Mock vision running — simulating 8 intersections")
+    t = 0
+    while True:
+        t += 1
+        h = datetime.now().hour
+        peak = 0.3 if 8 <= h <= 10 or 17 <= h <= 20 else 0.0
+        
+        for iid in INTERSECTIONS:
+            base = BASELINES[iid]
+            wave = 0.15 * math.sin(t / 20)  # slow oscillation for drama
+            density = round(min(0.98, max(0.05, base + peak + wave + random.uniform(-0.05, 0.05))), 3)
+            count = int(density * 80)
+            
+            state = {
+                "id": iid,
+                "count": count,
+                "density": density,
+                "emergency_confidence": 0.0,
+                "ts": datetime.now().isoformat()
+            }
+            r.set(f"{iid}:state", json.dumps(state), ex=10)
+        
+        await asyncio.sleep(1)
 
-t = 0
-print("📹 mock_vision: writing to Redis every 1s... (Ctrl+C to stop)")
-
-while True:
-    for iid in INTERSECTIONS:
-        # Sinusoidal density variation — simulates rush-hour waves
-        base    = BASELINES[iid]
-        wave    = 0.2 * math.sin(t / 30)
-        noise   = random.uniform(-0.05, 0.05)
-        density = round(max(0.1, min(1.0, base + wave + noise)), 3)
-
-        # Simulate an ambulance appearing for 5 seconds every 5 minutes
-        emrg = 0.92 if (t % 300) in range(5) and iid == 'CP_01' else 0.0
-
-        r.set(f"{iid}:state", json.dumps({
-            "id": iid, "count": int(density * 60),
-            "density": density, "emergency_confidence": emrg,
-            "ts": datetime.now().isoformat()
-        }), ex=10)
-
-    t += 1
-    time.sleep(1)
+if __name__ == "__main__":
+    asyncio.run(run_mock())

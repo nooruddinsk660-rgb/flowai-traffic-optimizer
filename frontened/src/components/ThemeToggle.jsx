@@ -2,27 +2,28 @@ import React, { useState, useEffect } from 'react';
 import { Sun, Moon } from 'lucide-react';
 
 export default function ThemeToggle() {
-  const [isLight, setIsLight] = useState(false);
+  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
 
   useEffect(() => {
     const root = window.document.documentElement;
-    if (isLight) {
+    if (theme === 'light') {
       root.classList.add('light');
     } else {
       root.classList.remove('light');
     }
-  }, [isLight]);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
 
   return (
     <button
-      onClick={() => setIsLight(!isLight)}
-      className="p-2 rounded-lg bg-panel border border-slate-800 hover:border-accent transition-all flex items-center justify-center shadow-lg"
-      title={isLight ? "Switch to Dark Mode" : "Switch to Light Mode"}
+      onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+      className="p-2 rounded-xl bg-panel border border-main hover:border-accent transition-all duration-300 shadow-lg group"
+      title="Switch System Theme"
     >
-      {isLight ? (
-        <Moon className="w-4 h-4 text-slate-900" />
+      {theme === 'dark' ? (
+        <Sun className="w-4 h-4 text-amber-400 group-hover:rotate-45 transition-transform" />
       ) : (
-        <Sun className="w-4 h-4 text-accent animate-pulse" />
+        <Moon className="w-4 h-4 text-slate-600" />
       )}
     </button>
   );

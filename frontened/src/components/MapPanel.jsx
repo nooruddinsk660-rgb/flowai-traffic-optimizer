@@ -20,6 +20,7 @@ const createCustomIcon = (node) => {
     });
 };
 export default function MapPanel({ intersections, onTrigger }) {
+    const [loadingId, setLoadingId] = React.useState(null);
     // Center of Delhi
     const center = [28.6139, 77.2090];
 
@@ -41,12 +42,12 @@ export default function MapPanel({ intersections, onTrigger }) {
                         {/* AQI HEATMAP LAYER */}
                         <Circle
                             center={[node.lat, node.lng]}
-                            radius={1200} 
+                            radius={1200}
                             pathOptions={{
-                                fillColor: node.pm25 > 250 ? '#7e22ce' : 
-                                node.pm25 > 150 ? '#ef4444' :  '#f59e0b',                               
+                                fillColor: node.pm25 > 250 ? '#7e22ce' :
+                                    node.pm25 > 150 ? '#ef4444' : '#f59e0b',
                                 color: 'transparent',
-                                fillOpacity: 0.15, 
+                                fillOpacity: 0.15,
                             }}
                         />
                         <Marker
@@ -60,14 +61,29 @@ export default function MapPanel({ intersections, onTrigger }) {
                                     <p className="text-xs text-slate-300">AQI: <span className="text-traffic-amber">{node.pm25}</span></p>
 
                                     <button
-                                        onClick={() => onTrigger(node.id)}
-                                        disabled={node.emergency_active}
+                                        onClick={async () => {
+                                            if (loadingId === node.id || node.emergency_active) return;
+                                            setLoadingId(node.id);
+                                            try {
+                                                await fetch(`http://localhost:8000/emergency`, {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({ route: node.id, source: 'manual' })
+                                                });
+                                                onTrigger(node.id);
+                                            } catch (e) {
+                                                console.error(e);
+                                            } finally {
+                                                setLoadingId(null);
+                                            }
+                                        }}
+                                        disabled={loadingId === node.id || node.emergency_active}
                                         className={`w-full text-white text-[10px] font-black py-2 rounded uppercase tracking-widest transition-all mt-2 ${node.emergency_active
                                             ? 'bg-slate-700 cursor-not-allowed opacity-80'
                                             : 'bg-traffic-emergency hover:scale-105 active:scale-95 shadow-lg shadow-red-900/20'
                                             }`}
                                     >
-                                        {node.emergency_active ? '✅ Route Cleared' : '🚨 Trigger Emergency'}
+                                        {loadingId === node.id ? 'ACTIVATING...' : (node.emergency_active ? '✅ Route Cleared' : '🚨 TRIGGER EMERGENCY')}
                                     </button>
                                 </div>
                             </Popup>

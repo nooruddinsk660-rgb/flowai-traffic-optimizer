@@ -3,8 +3,6 @@ import numpy as np
 import xgboost as xgb
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
-from sklearn.preprocessing import LabelEncoder
-import joblib
 import os
 import json
 from datetime import datetime
@@ -29,7 +27,7 @@ def train_xgboost():
     X = df[features]
     y = df["density"]
     
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
     
     print("Training XGBoost Regressor...")
     model = xgb.XGBRegressor(
@@ -59,11 +57,13 @@ def train_xgboost():
     
     print("\nRunning 5-Fold Cross Validation...")
     cv_model = xgb.XGBRegressor(
-        n_estimators=300, max_depth=6, learning_rate=0.05, 
+        n_estimators=model.best_iteration, max_depth=6, learning_rate=0.05, 
         subsample=0.8, colsample_bytree=0.8, min_child_weight=3, 
-        reg_alpha=0.1, reg_lambda=1.0, random_state=42
+        reg_alpha=0.1, reg_lambda=1.0, n_jobs=-1, random_state=42
     )
-    cv_scores = cross_val_score(cv_model, X, y, cv=5, scoring='r2')
+    from sklearn.model_selection import TimeSeriesSplit
+    tscv = TimeSeriesSplit(n_splits=5)
+    cv_scores = cross_val_score(cv_model, X, y, cv=tscv, scoring='r2')
     cv_mean = cv_scores.mean()
     cv_std = cv_scores.std()
     
@@ -115,16 +115,14 @@ def train_xgboost():
     model_json_path = "models/congestion_model.json"
     model.save_model(model_json_path)
     
-    # Save Label Encoder
-    le = LabelEncoder()
-    le.classes_ = np.array(["CP_01", "AIIMS_01", "INA_01", "SAK_01", "NEHRU_01", "KALK_01", "LODHI_01", "ROHINI_01"])
-    joblib.dump(le, "models/intersection_encoder.pkl")
-    
+
     # Save Metadata JSON
     metadata = {
         "r2": float(r2),
         "mae": float(mae),
         "mse": float(mse),
+        "features": features,
+        "intersection_encoding": "integer_0_to_7",
         "trained_at": datetime.now().strftime("%Y-%m-%d"),
         "n_rows": int(len(df))
     }

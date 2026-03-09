@@ -1,60 +1,52 @@
 import React from 'react';
-import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
+import Map from './Map'; // Import the logic-heavy Map component
 
-export default function MapSection({ intersections }) {
-    // Center map on Delhi
-    const delhiCenter = [28.6139, 77.2090];
+export default function MapSection({ intersections, emergency }) {
+  return (
+    <div className="relative w-full h-full overflow-hidden">
+      
+      {/* THE ACTUAL LEAFLET MAP */}
+      <Map intersections={intersections} emergency={emergency} />
 
-    return (
-        <MapContainer
-            center={delhiCenter}
-            zoom={11}
-            className="w-full h-full absolute inset-0 z-0 bg-background"
-            zoomControl={false}
-        >
-            <TileLayer
-                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-            />
+      {/* TOP RIGHT (System Coordinates) */}
+      <div className="absolute top-6 right-6 z-[1000] pointer-events-none">
+        <div className="bg-slate-950/80 backdrop-blur-md border border-white/10 p-3 rounded-lg shadow-2xl">
+          <div className="flex flex-col gap-1 text-[9px] font-mono text-slate-400 tracking-widest uppercase">
+            <div className="flex justify-between gap-4">
+              <span>Sector:</span>
+              <span className="text-sky-400 font-bold">DEL_SEC_01</span>
+            </div>
+            <div className="flex justify-between gap-4">
+              <span>Nodes:</span>
+              <span className="text-sky-400 font-bold">{intersections.length} Active</span>
+            </div>
+          </div>
+        </div>
+      </div>
 
-            {intersections.map((node) => {
-                // Determine color based on node state
-                let markerColor = '#22c55e'; 
-                if (node.emergency_active) {
-                    markerColor = '#dc2626'; 
-                } else if (node.density > 0.7) {
-                    markerColor = '#ef4444'; 
-                } else if (node.density > 0.4) {
-                    markerColor = '#f59e0b'; 
-                }
+      {/* BOTTOM LEFT (Live Legend) */}
+      <div className="absolute bottom-6 left-6 z-[1000] pointer-events-none">
+        <div className="bg-slate-950/80 backdrop-blur-md border border-white/10 p-4 rounded-lg">
+          <h4 className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em] mb-3">Signal_Legend</h4>
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]" />
+              <span className="text-[9px] text-slate-400 font-mono">OPTIMAL_FLOW</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_8px_#f59e0b]" />
+              <span className="text-[9px] text-slate-400 font-mono">CONGESTED</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-2 rounded-full bg-red-600 animate-pulse shadow-[0_0_8px_#dc2626]" />
+              <span className="text-[9px] text-red-500 font-mono font-bold">EMERGENCY_PRIORITY</span>
+            </div>
+          </div>
+        </div>
+      </div>
 
-                return (
-                    <CircleMarker
-                        key={node.id}
-                        center={[node.lat, node.lng]}
-                        radius={node.density > 0.7 ? 12 : 8}
-                        pathOptions={{
-                            color: markerColor,
-                            fillColor: markerColor,
-                            fillOpacity: 0.6,
-                            weight: 2
-                        }}
-                    >
-                        <Popup className="black-popup">
-                            <div className="font-sans">
-                                <strong className="block text-slate-800 text-sm mb-1">{node.name}</strong>
-                                <div className="text-xs text-slate-600 mb-0.5">ID: {node.id}</div>
-                                <div className="text-xs text-slate-600 mb-0.5">PM2.5: {node.pm25} µg/m³</div>
-                                <div className="text-xs text-slate-600 mb-0.5">Density: {(node.density * 100).toFixed(0)}%</div>
-                                <div className="text-xs font-bold text-slate-800 mt-2">
-                                    Timer: {node.green_seconds}s ({node.active_direction})
-                                </div>
-                            </div>
-                        </Popup>
-                    </CircleMarker>
-                );
-            })}
-        </MapContainer>
-    );
+      {/*  VIGNETTE EFFECT */}
+      <div className="absolute inset-0 pointer-events-none shadow-[inset_0_0_150px_rgba(0,0,0,0.6)]" />
+    </div>
+  );
 }

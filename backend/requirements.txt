@@ -1,7 +1,13 @@
 fastapi
-uvicorn[standard]
+uvicorn
 redis
-aiosqlite
-httpx
-pydantic
+ultralytics
+xgboost
+networkx
+geopy
+scikit-learn
+sounddevice
+tensorflow-hub
+pandas
+numpy
 python-dotenv
