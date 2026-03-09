@@ -1,9 +1,14 @@
 import pandas as pd
+import numpy as np
 import xgboost as xgb
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import r2_score, mean_squared_error
+from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+from sklearn.preprocessing import LabelEncoder
 import joblib
 import os
+import json
+from datetime import datetime
+import matplotlib.pyplot as plt
 
 def train_xgboost():
     print("Loading data...")
@@ -50,20 +55,65 @@ def train_xgboost():
     preds = model.predict(X_test)
     r2 = r2_score(y_test, preds)
     mse = mean_squared_error(y_test, preds)
+    mae = mean_absolute_error(y_test, preds)
     
     print(f"Model Performance:")
     print(f"R² Score: {r2:.4f}")
     print(f"MSE: {mse:.4f}")
+    print(f"MAE: {mae:.4f}")
     
-    if r2 >= 0.85:
-        print("Target R² >= 0.85 achieved!")
+    if r2 >= 0.85 and mae <= 0.08 and mse <= 0.12:
+        print("Target Metrics Achieved!")
     else:
-        print("Model needs tuning to reach R² >= 0.85")
+        print("Model needs tuning to reach targets.")
         
     os.makedirs("models", exist_ok=True)
-    model_path = "models/xgboost_traffic.joblib"
-    joblib.dump(model, model_path)
-    print(f"Model saved to {model_path} (size: {os.path.getsize(model_path) / 1024:.1f} KB)")
+    
+    # Feature importance plot
+    plt.figure(figsize=(10, 6))
+    xgb.plot_importance(model, max_num_features=10)
+    plt.title("Feature Importance")
+    plt.tight_layout()
+    plt.savefig("models/feature_importance.png")
+    print("Feature importance plot saved to models/feature_importance.png")
+    
+    # Scatter plot for 3 intersections
+    subset_mask = X_test["intersection_id"].isin([0, 1, 7]) # CP, AIIMS, ROHINI
+    y_test_sub = y_test[subset_mask]
+    preds_sub = preds[subset_mask]
+    
+    plt.figure(figsize=(8, 8))
+    plt.scatter(y_test_sub, preds_sub, alpha=0.3, color='blue', label='Predictions')
+    plt.plot([0, 1], [0, 1], 'r--', label='Ideal Fit')
+    plt.title('Actual vs Predicted Density (CP, AIIMS, ROHINI)')
+    plt.xlabel('Actual Density')
+    plt.ylabel('Predicted Density')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig("models/model_performance.png")
+    print("Prediction scatter plot saved to models/model_performance.png")
+    
+    # Save Model JSON
+    model_json_path = "models/congestion_model.json"
+    model.save_model(model_json_path)
+    
+    # Save Label Encoder
+    le = LabelEncoder()
+    le.classes_ = np.array(["CP_01", "AIIMS_01", "INA_01", "SAK_01", "NEHRU_01", "KALK_01", "LODHI_01", "ROHINI_01"])
+    joblib.dump(le, "models/intersection_encoder.pkl")
+    
+    # Save Metadata JSON
+    metadata = {
+        "r2": float(r2),
+        "mae": float(mae),
+        "mse": float(mse),
+        "trained_at": datetime.now().strftime("%Y-%m-%d"),
+        "n_rows": int(len(df))
+    }
+    with open("models/model_meta.json", "w") as f:
+        json.dump(metadata, f, indent=4)
+        
+    print(f"Model artifacts saved successfully in models/ directory!")
 
 if __name__ == "__main__":
     train_xgboost()
