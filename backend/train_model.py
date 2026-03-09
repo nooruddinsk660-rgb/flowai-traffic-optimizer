@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import xgboost as xgb
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 from sklearn.preprocessing import LabelEncoder
 import joblib
@@ -57,7 +57,25 @@ def train_xgboost():
     mse = mean_squared_error(y_test, preds)
     mae = mean_absolute_error(y_test, preds)
     
-    print(f"Model Performance:")
+    print("\nRunning 5-Fold Cross Validation...")
+    cv_model = xgb.XGBRegressor(
+        n_estimators=300, max_depth=6, learning_rate=0.05, 
+        subsample=0.8, colsample_bytree=0.8, min_child_weight=3, 
+        reg_alpha=0.1, reg_lambda=1.0, random_state=42
+    )
+    cv_scores = cross_val_score(cv_model, X, y, cv=5, scoring='r2')
+    cv_mean = cv_scores.mean()
+    cv_std = cv_scores.std()
+    
+    print(f"CV R² Mean: {cv_mean:.4f}")
+    print(f"CV R² Std Dev: {cv_std:.4f}")
+    
+    if cv_mean >= 0.85 and cv_std < 0.05:
+        print("Cross-Validation criteria PASSED: Model is highly stable.")
+    else:
+        print("Model failed cross-validation stability test!")
+        
+    print(f"\nTest Set Performance:")
     print(f"R² Score: {r2:.4f}")
     print(f"MSE: {mse:.4f}")
     print(f"MAE: {mae:.4f}")

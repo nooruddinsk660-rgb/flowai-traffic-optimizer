@@ -109,5 +109,32 @@ async def forecast_loop():
             print(f"Error in prediction loop: {e}")
             await asyncio.sleep(10)
 
+def get_forecast_alert(intersection_id, r):
+    redis_key = f"forecast:{intersection_id}:30min"
+    data = r.get(redis_key)
+    
+    if not data:
+        return {"alert": False, "peak_t_plus": 0, "peak_density": 0.0}
+        
+    predictions = json.loads(data)
+    
+    alert = False
+    peak_t_plus = 0
+    peak_density = 0.0
+    
+    for p in predictions:
+        if p["density"] > peak_density:
+            peak_density = p["density"]
+            peak_t_plus = p["t_plus"]
+            
+        if p["density"] > 0.75:
+            alert = True
+            
+    return {
+        "alert": alert,
+        "peak_t_plus": peak_t_plus,
+        "peak_density": peak_density
+    }
+
 if __name__ == "__main__":
     asyncio.run(forecast_loop())
