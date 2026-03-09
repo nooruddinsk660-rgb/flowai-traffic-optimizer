@@ -1,0 +1,114 @@
+@import "tailwindcss";
+
+/* DEFINE TOKENS */
+@theme {
+  --color-panel: #0f172a;
+  --color-background: #020617;
+  --color-accent: #38bdf8;
+
+  --color-traffic-green: #22c55e;
+  --color-traffic-amber: #f59e0b;
+  --color-traffic-red: #ef4444;
+  --color-traffic-emergency: #dc2626;
+
+  --animate-pulse-fast: pulse-fast 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+} 
+
+@keyframes pulse-fast {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@layer base {
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+    background-color: #020617;
+    color: #e2e8f0;
+    overflow: hidden;
+  }
+}
+
+/* MAP FIXES */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  background-color: #020617 !important;
+}
+
+/* Custom Leaflet Popup Styling  */
+
+.leaflet-popup-content-wrapper {
+  background-color: var(--color-panel) !important;
+  border: 1px solid #334155 !important;
+  color: #e2e8f0 !important; 
+  border-radius: 0.5rem !important; 
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important; 
+}
+
+.leaflet-popup-tip {
+  background-color: var(--color-panel) !important;
+  border-bottom: 1px solid #334155 !important;
+  border-right: 1px solid #334155 !important;
+}
+
+.leaflet-popup-content {
+  margin: 12px !important;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+.leaflet-popup-close-button {
+  color: #94a3b8 !important;
+  padding: 8px !important;
+}
+
+.custom-div-icon {
+  background: none !important;
+  border: none !important;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #1e293b; /* slate-800 */
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #38bdf8; /* accent blue */
+}
+
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    /* Default Dark Mode */
+    --color-panel: #0f172a;
+    --color-background: #020617;
+    --color-accent: #38bdf8;
+    --color-text: #f1f5f9;
+    --color-border: #1e293b;
+  }
+
+  /* Light Mode */
+  :root.light {
+    --color-panel: #ffffff;
+    --color-background: #f8fafc;
+    --color-accent: #0284c7; 
+    --color-text: #0f172a;
+    --color-border: #e2e8f0;
+  }
+}

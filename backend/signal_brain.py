@@ -57,22 +57,29 @@ async def run_fsm_for_intersection(iid: str, r):
             is_gridlock = gridlock_ct >= settings.gridlock_cycles
 
             # ── Emergency auto-detection (sensor fusion) ───────────────
-            audio_raw = await r.get("audio:siren_confidence")
-            audio_c  = float(audio_raw or 0.0)
-            fused_c  = (audio_c * 0.55) + (emrg_c * 0.45)
-            if audio_c > 0.88 or emrg_c > 0.92: fused_c = max(audio_c, emrg_c)
+            from siren_detector import get_fused_emergency_confidence
+            fused_c, detected_source = await get_fused_emergency_confidence(iid, r)
+
+            # ── Pre-conditioning Logic (Forecast evaluation) ───────────
+            forecast_raw = await r.get(f"forecast:{iid}:30min")
+            t_plus_10_density = 0.0
+            if forecast_raw:
+                forecast_data = json.loads(forecast_raw)
+                # Look for t+10 prediction block
+                for f in forecast_data:
+                    if f.get("t_plus") == 10:
+                        t_plus_10_density = f.get("density", 0.0)
+                        break
 
             now = asyncio.get_event_loop().time()
             cooldown_ok = (now - last_emrg) > settings.emergency_cooldown_s
             emrg_active = await r.exists("emergency:active")
 
             if fused_c > settings.emergency_threshold and cooldown_ok and not emrg_active:
-                source = "dual" if audio_c > 0.5 and emrg_c > 0.5 else \
-                         "audio" if audio_c >= emrg_c else "visual"
                 from emergency import activate_corridor
-                asyncio.create_task(activate_corridor("CP_01_AIIMS_01", source, r))
+                asyncio.create_task(activate_corridor("CP_01_AIIMS_01", detected_source, r))
                 last_emrg = now
-                log.warning(f"🚨 AUTO-EMERGENCY at {iid} source={source} fused={fused_c:.2f}")
+                log.warning(f"🚨 AUTO-EMERGENCY at {iid} source={detected_source} fused={fused_c:.2f}")
 
             # ── If this intersection is in EMERGENCY mode, skip normal cycle ─
             sig_raw = await r.get(f"{iid}:signal")
@@ -84,6 +91,12 @@ async def run_fsm_for_intersection(iid: str, r):
 
             # ── Normal adaptive cycle ──────────────────────────────────
             green_s  = calculate_green_time(density, aqi_pen)
+
+            # Proactive extension: +8s if approaching dense traffic in 10 mins
+            if t_plus_10_density > 0.75:
+                green_s += 8
+                log.info(f"🔮 PROACTIVE EXTENSION at {iid}: +8s applied (t+10 density={t_plus_10_density:.2f})")
+
             direction = DIRECTIONS[dir_idx % 4]
 
             signal_payload = {

@@ -1,0 +1,5 @@
+train: c:/Users/Sk Nooruddin/FLOWAI/models/ambulance_dataset/indian-ambulance-detector.v1i.yolov8/train/images
+val: c:/Users/Sk Nooruddin/FLOWAI/models/ambulance_dataset/indian-ambulance-detector.v1i.yolov8/train/images
+
+nc: 1
+names: ['ambulance']
