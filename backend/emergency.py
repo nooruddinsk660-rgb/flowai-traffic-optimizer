@@ -36,7 +36,15 @@ async def activate_corridor(route_key: str, source: str, r) -> dict:
     """Activates full green corridor. Returns corridor details."""
     route = AMBULANCE_ROUTES.get(route_key)
     if not route:
-        return {"error": f"Unknown route: {route_key}"}
+        try:
+            # Dynamically compute path if not in predefined list (e.g. user clicks arbitrary node!)
+            from routing import build_ambulance_route, G_DELHI
+            # Map.jsx sends `${node.id}_AIIMS_01`
+            start_id = route_key.replace("_AIIMS_01", "")
+            route = build_ambulance_route(start_id, "AIIMS_01", G_DELHI)
+        except Exception as e:
+            log.error(f"Routing Error: {e}")
+            return {"error": f"Unknown or unreachable route: {route_key}"}
 
     # Calculate total duration first for TTL
     total_eta = sum(leg.get("travel_s", 60) for leg in route)

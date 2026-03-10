@@ -1,38 +1,52 @@
 import numpy as np
+import redis, os, time, logging, asyncio, json
 import sounddevice as sd
-import tensorflow as tf
-import tensorflow_hub as hub
-import redis, os, time, logging
-import asyncio
-import json
 from signal_brain import safe_redis_get, safe_redis_set
 from constants import AUDIO_SIREN_KEY
 
 log = logging.getLogger("siren")
-r = redis.Redis(host=os.getenv("REDIS_HOST","localhost"), decode_responses=True)
+r = redis.Redis(host=os.getenv("REDIS_HOST", "localhost"), decode_responses=True)
 
-# YAMNet siren class indices (emergency vehicle sirens)
-SIREN_CLASSES = {397, 398, 399, 400}  # ambulance, fire, police sirens
-SAMPLE_RATE = 16000
-CHUNK_SECONDS = 0.96  # YAMNet window size
+SIREN_CLASSES = {397, 398, 399, 400}
+SAMPLE_RATE   = 16000
+CHUNK_SECONDS = 0.96
 
-print("Loading YAMNet...")
-model = hub.load('https://tfhub.dev/google/yamnet/1')
-print("✅ YAMNet loaded")
+# ── DO NOT load model at module level — it blocks FastAPI startup for 30s ──
+_model = None
+
+def _get_model():
+    """Lazy-load YAMNet on first audio chunk. Fails silently if TF not installed."""
+    global _model
+    if _model is None:
+        try:
+            import tensorflow_hub as hub
+            _model = hub.load('https://tfhub.dev/google/yamnet/1')
+            log.info("✅ YAMNet loaded")
+        except Exception as e:
+            log.warning(f"YAMNet unavailable: {e} — siren detection disabled")
+    return _model
 
 def analyze_chunk(audio_chunk) -> float:
-    waveform = tf.constant(audio_chunk, dtype=tf.float32)
-    scores, _, _ = model(waveform)
-    mean_scores = tf.reduce_mean(scores, axis=0).numpy()
-    siren_conf = float(np.max([mean_scores[i] for i in SIREN_CLASSES]))
-    return siren_conf
+    model = _get_model()
+    if model is None:
+        return 0.0
+    try:
+        import tensorflow as tf
+        waveform    = tf.constant(audio_chunk, dtype=tf.float32)
+        scores, _, _ = model(waveform)
+        mean_scores = tf.reduce_mean(scores, axis=0).numpy()
+        return float(np.max([mean_scores[i] for i in SIREN_CLASSES]))
+    except Exception as e:
+        log.error(f"YAMNet inference error: {e}")
+        return 0.0
 
 def run():
-    print("🎙️ Siren detector listening...")
+    log.info("🎙️ Siren detector listening...")
     chunk_size = int(SAMPLE_RATE * CHUNK_SECONDS)
     while True:
         try:
-            audio = sd.rec(chunk_size, samplerate=SAMPLE_RATE, channels=1, dtype='float32', blocking=True)
+            audio = sd.rec(chunk_size, samplerate=SAMPLE_RATE,
+                           channels=1, dtype='float32', blocking=True)
             conf = analyze_chunk(audio.flatten())
             r.set(AUDIO_SIREN_KEY, round(conf, 3), ex=3)
             if conf > 0.5:
@@ -42,7 +56,6 @@ def run():
         time.sleep(1)
 
 async def run_audio_detector():
-    """Async wrapper to be attached to main.py event loop"""
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, run)
 

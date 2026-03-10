@@ -36,8 +36,12 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(start_all_fsm(INTERSECTIONS, redis_client))
     asyncio.create_task(fetch_and_cache_aqi(redis_client))
     
-    from siren_detector import run_audio_detector
-    asyncio.create_task(run_audio_detector())
+    try:
+        from siren_detector import run_audio_detector
+        asyncio.create_task(run_audio_detector())
+        logger.info("✅ Audio detector task started")
+    except Exception as e:
+        logger.warning(f"⚠️ Siren detector failed to start: {e} — continuing without audio")
     
     asyncio.create_task(broadcast_loop())
     

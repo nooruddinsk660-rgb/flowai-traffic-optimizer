@@ -11,3 +11,6 @@ tensorflow-hub
 pandas
 numpy
 python-dotenv
+aiosqlite
+pydantic-settings
+httpx
