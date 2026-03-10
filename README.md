@@ -420,24 +420,6 @@ VITE_WS_URL=wss://your-app.railway.app/ws
 
 ---
 
-## 📋 Demo Day Checklist
-
-Full checklist: [`DEMO_CHECKLIST.md`](https://github.com/nooruddinsk660-rgb/flowai-traffic-optimizer/blob/main/DEMO_CHECKLIST.md)
-
-```
-□ Redis running          →  redis-cli ping  →  PONG
-□ Backend healthy        →  GET /health  →  {"status": "ok"}
-□ Mock vision active     →  densities updating in sidebar
-□ Map showing 8 nodes    →  colored circles on Delhi map
-□ Popup working          →  click any node → live stats
-□ Emergency trigger      →  click 🚨 → red corridor activates
-□ Before/After visible   →  18:00 vs 4:14 panel appears
-□ MJPEG feed visible     →  YOLO bounding boxes in camera feed
-□ Ctrl+Shift+R resets    →  corridor cleared, nominal restored
-```
-
----
-
 ## 👥 Team
 
 | Role | Responsibilities |
